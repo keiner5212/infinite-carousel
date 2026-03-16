@@ -55,7 +55,7 @@ Increase or decrease `VISIBLE_SLIDES` to modify how many slide elements are rend
 
 The carousel exposes no public API in the current implementation (self-contained script). Add helper functions for programmatic control if needed.
 
-## Diagram (Mermaid)
+## Diagram
 
 ```mermaid
 flowchart LR
