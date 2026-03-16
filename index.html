@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Real infinite carousel</title>
+    <style>
+        :root {
+            --slide-w: 260px;
+            --gap: 24px;
+            --speed: 400ms;
+            --easing: cubic-bezier(0.22, 1, 0.36, 1);
+            --scale: 1.20;
+        }
+
+        body {
+            margin: 40px;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            height: 100dvh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .carousel {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            max-width: 1200px;
+            height: 100%;
+        }
+
+        .viewport {
+            overflow: hidden;
+            flex: 1;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            will-change: transform;
+        }
+
+        .track {
+            display: flex;
+            will-change: transform;
+            transition: transform var(--speed) var(--easing);
+        }
+
+        .slide {
+            flex: 0 0 var(--slide-w);
+            margin: 0 var(--gap);
+        }
+
+        .slide img {
+            width: 100%;
+            border-radius: 12px;
+            display: block;
+            pointer-events: none;
+            user-select: none;
+            transition: transform calc(var(--speed) * 0.8) var(--easing) calc(var(--speed) * 0.1);
+            will-change: transform;
+            transform-origin: center center;
+        }
+
+        .center img {
+            transform: scale(var(--scale));
+        }
+
+        button {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #f0f0f0;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .autoplay-btn {
+            width: auto;
+            padding: 0 20px;
+            border-radius: 40px;
+            font-size: 16px;
+            gap: 8px;
+        }
+
+        .autoplay-btn.active {
+            background: #4caf50;
+            color: white;
+            border-color: #4caf50;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="carousel">
+        <button id="prev"
+                aria-label="Previous">‹</button>
+        <div class="viewport">
+            <div class="track"
+                 id="track"></div>
+        </div>
+        <button id="next"
+                aria-label="Next">›</button>
+    </div>
+
+    <div class="controls">
+        <button id="autoplayToggle"
+                class="autoplay-btn">▶ Autoplay</button>
+    </div>
+
+    <script>
+        (function () {
+            const IMAGES = [
+                'https://picsum.photos/seed/1/800/600',
+                'https://picsum.photos/seed/2/800/600',
+                'https://picsum.photos/seed/3/800/600',
+                'https://picsum.photos/seed/4/800/600',
+                'https://picsum.photos/seed/5/800/600',
+                'https://picsum.photos/seed/6/800/600'
+            ];
+
+            const SLIDE_WIDTH = 260;
+            const GAP = 24;
+            const SLIDE_SIZE = SLIDE_WIDTH + GAP * 2;
+            const VISIBLE_SLIDES = 9;
+            const CENTER_INDEX = Math.floor(VISIBLE_SLIDES / 2);
+            const AUTOPLAY_MS = 3000;
+
+            const track = document.getElementById('track');
+            const viewport = document.querySelector('.viewport');
+            const prevBtn = document.getElementById('prev');
+            const nextBtn = document.getElementById('next');
+            const autoplayBtn = document.getElementById('autoplayToggle');
+
+            let virtualCenter = 0;
+            let offset = 0;
+            let isAnimating = false;
+            let autoplay = false;
+            let autoplayId = null;
+
+            const normalizeIndex = (index) => ((index % IMAGES.length) + IMAGES.length) % IMAGES.length;
+
+            const createSlide = (virtualIndex) => {
+                const item = document.createElement('div');
+                item.className = 'slide';
+                item.dataset.index = virtualIndex;
+
+                const img = document.createElement('img');
+                const srcIndex = normalizeIndex(virtualIndex);
+                img.src = IMAGES[srcIndex];
+                img.alt = `Image ${srcIndex + 1}`;
+
+                item.appendChild(img);
+                return item;
+            };
+
+            const updateSlide = (slide, virtualIndex) => {
+                slide.dataset.index = virtualIndex;
+                const img = slide.querySelector('img');
+                const srcIndex = normalizeIndex(virtualIndex);
+                img.src = IMAGES[srcIndex];
+                img.alt = `Image ${srcIndex + 1}`;
+            };
+
+            const updateTransform = () => {
+                const viewportWidth = viewport.offsetWidth;
+                const centerOffset = viewportWidth / 2 - SLIDE_WIDTH / 2;
+                const x = centerOffset - (CENTER_INDEX + offset) * SLIDE_SIZE;
+                track.style.transform = `translate3d(${x}px, 0, 0)`;
+            };
+
+            const highlightCenter = (offsetIndex = 0) => {
+                Array.from(track.children).forEach((slide) => slide.classList.remove('center'));
+                const centerSlide = track.children[CENTER_INDEX + offsetIndex];
+                if (centerSlide) centerSlide.classList.add('center');
+            };
+
+            const recycle = (dir) => {
+                if (dir > 0) {
+                    const first = track.firstElementChild;
+                    track.removeChild(first);
+                    const newVirtual = virtualCenter + (VISIBLE_SLIDES - 1 - CENTER_INDEX);
+                    updateSlide(first, newVirtual);
+                    track.appendChild(first);
+                } else {
+                    const last = track.lastElementChild;
+                    track.removeChild(last);
+                    const newVirtual = virtualCenter - CENTER_INDEX;
+                    updateSlide(last, newVirtual);
+                    track.prepend(last);
+                }
+            };
+
+            const move = (dir) => {
+                if (isAnimating) return;
+                isAnimating = true;
+
+                virtualCenter += dir;
+                offset += dir;
+
+                updateTransform();
+                highlightCenter(dir);
+
+                const onEnd = () => {
+                    track.removeEventListener('transitionend', onEnd);
+                    track.style.transition = 'none';
+
+                    recycle(dir);
+
+                    offset = 0;
+                    updateTransform();
+                    highlightCenter();
+
+                    void track.offsetHeight;
+                    track.style.transition = '';
+                    isAnimating = false;
+                };
+
+                track.addEventListener('transitionend', onEnd, { once: true });
+            };
+
+            const init = () => {
+                const half = Math.floor(VISIBLE_SLIDES / 2);
+                for (let i = -half; i <= half; i += 1) {
+                    track.appendChild(createSlide(i));
+                }
+                updateTransform();
+                highlightCenter();
+            };
+
+            const startAutoplay = () => {
+                stopAutoplay();
+                autoplayId = setInterval(() => {
+                    if (!isAnimating && autoplay) move(1);
+                }, AUTOPLAY_MS);
+            };
+
+            const stopAutoplay = () => {
+                if (!autoplayId) return;
+                clearInterval(autoplayId);
+                autoplayId = null;
+            };
+
+            const toggleAutoplay = () => {
+                autoplay = !autoplay;
+                autoplayBtn.textContent = autoplay ? '⏸ Autoplay' : '▶ Autoplay';
+                autoplayBtn.classList.toggle('active', autoplay);
+                if (autoplay) startAutoplay();
+            };
+
+            prevBtn.addEventListener('click', () => move(-1));
+            nextBtn.addEventListener('click', () => move(1));
+            autoplayBtn.addEventListener('click', toggleAutoplay);
+
+            window.addEventListener('beforeunload', stopAutoplay);
+
+            window.addEventListener('resize', () => {
+                track.style.transition = 'none';
+                updateTransform();
+                void track.offsetHeight;
+                track.style.transition = '';
+            });
+
+            init();
+        })();
+    </script>
+
+</body>
+
+</html>
